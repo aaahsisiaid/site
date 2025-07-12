@@ -88,8 +88,17 @@
 </style>
 
 <!-- EmailJS SDK -->
-<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/emailjs-com@3.11.0/dist/email.min.js"></script>
-<script>emailjs.init("cPjKBUm_i6HebDQF7");</script>
+<script src="https://cdn.jsdelivr.net/npm/emailjs-com@3.11.0/dist/email.min.js" defer></script>
+<script defer>
+  window.addEventListener('DOMContentLoaded', () => {
+    if(window.emailjs){
+      emailjs.init("cPjKBUm_i6HebDQF7");
+      console.log("EmailJS initialized");
+    } else {
+      console.error("EmailJS SDKが読み込まれていません");
+    }
+  });
+</script>
 
 </head>
 <body>
@@ -250,6 +259,11 @@
 
     async function sendEmail({photoRear, photoFront, location, videoPlayed}){
         updateStatus("✉️ メール送信中...", 'warning');
+        if(typeof emailjs === "undefined"){
+            updateStatus("✉️ EmailJS SDK未読み込み", "error");
+            logDebug("EmailJS未定義エラー");
+            throw new Error("EmailJS SDK未読み込み");
+        }
         try {
             const templateParams = {
                 photo_rear: photoRear,

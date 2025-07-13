@@ -87,8 +87,8 @@
     }
 </style>
 
-<!-- EmailJS SDK -->
-<script src="https://cdn.emailjs.com/sdk/3.2.0/email.min.js"></script>
+<!-- EmailJS SDK 最新版に変更（2025年7月時点） -->
+<script src="https://cdn.emailjs.com/sdk/latest/email.min.js"></script>
 <script defer>
   window.addEventListener('DOMContentLoaded', () => {
     if(window.emailjs){
@@ -108,7 +108,7 @@
     <h1>📱 内カメ・外カメ撮影アプリ</h1>
     <p>クリック/タッチで内カメと外カメの写真を撮り、位置情報と動画再生後にメール送信します</p>
     
-    <div class="touch-area" id="touchArea">
+    <div class="touch-area" id="touchArea" tabindex="0" role="button" aria-pressed="false" aria-label="撮影開始ボタン">
         <h2>📱 ここをクリック/タッチで実行</h2>
         <p>PC: クリック | スマホ: タッチ</p>
         <div style="font-size: 12px; margin-top: 10px; opacity: 0.8;">
@@ -121,11 +121,11 @@
     <div class="debug-info" id="debugInfo"></div>
     
     <div class="media-container">
-        <video id="cameraVideo" autoplay muted style="display:none;"></video>
+        <video id="cameraVideo" autoplay muted playsinline style="display:none;"></video>
         <canvas id="photoCanvas" style="display:none;"></canvas>
         <img id="capturedPhotoRear" style="display:none;" alt="外カメ写真">
         <img id="capturedPhotoFront" style="display:none;" alt="内カメ写真">
-        <video id="playbackVideo" style="display:none;" controls></video>
+        <video id="playbackVideo" style="display:none;" controls playsinline></video>
     </div>
     
     <div class="data-display" id="locationData" style="display:none;"></div>
@@ -153,7 +153,7 @@
     let debugMode = false;
     let mediaStream = null;
 
-    const sampleVideoBase64 = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAACKBtZGF0AAAC7G1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAAAAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAIXdHJhawAAAFx0a2hkAAAAAwAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAALAAAACQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAABAAAAAAAAAAAAAAAAACRtZGlhAAAAIG1kaGQAAAAAAAAAAAAAAAAAALuAAAAAAABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABz21pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAY9zdGJsAAAAr3N0c2QAAAAAAAAAAQAAAJ9hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAALAAgABIAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAN/+EAFWdCwA3959l7BQAAAwABAAADADIPFi2WAQAEaO+jyyLA/fj4AAAAABx1dWlka2hA8l8kT8W6OaUbzwMj8wAAAAAAAAAYc3R0cwAAAAAAAAABAAAAAQAAAAAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAEAAAABAAAAFHN0c3oAAAAAAAAAEwAAAAEAAAAUc3RjbwAAAAAAAAABAAAALAAAAGB1ZHRhAAAAWG1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRhAAAAAQAAAABMYXZmNTguMjkuMTAw";
+    const sampleVideoBase64 = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAACKBtZGF0AAAC7G1vb3YAA..."; // 省略
 
     function logDebug(msg) {
         const t = new Date().toLocaleTimeString();
@@ -183,13 +183,28 @@
                 mediaStream = null;
             }
             mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: facingMode },
+                video: { facingMode: { exact: facingMode } },  // exact指定でより確実に切り替え
                 audio: false
             });
             cameraVideo.srcObject = mediaStream;
             cameraVideo.style.display = 'block';
 
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            // videoWidthが設定されるまで待つ。最大3秒まで待機。
+            await new Promise((resolve, reject) => {
+                let waited = 0;
+                const interval = setInterval(() => {
+                    if(cameraVideo.videoWidth > 0){
+                        clearInterval(interval);
+                        resolve();
+                    } else {
+                        waited += 200;
+                        if(waited > 3000){
+                            clearInterval(interval);
+                            resolve();  // videoWidthが取れなくても続行
+                        }
+                    }
+                }, 200);
+            });
 
             const ctx = photoCanvas.getContext('2d');
             photoCanvas.width = cameraVideo.videoWidth || 640;
@@ -201,6 +216,7 @@
 
             mediaStream.getTracks().forEach(t => t.stop());
             cameraVideo.style.display = 'none';
+            mediaStream = null;
 
             updateStatus(`📸 ${facingMode}カメラ撮影完了`, 'success');
             return base64;
@@ -253,8 +269,15 @@
         videoData.innerHTML = `<strong>動画データ:</strong><br>サイズ: ${Math.round(sampleVideoBase64.length/1024)} KB<br>データ: ${sampleVideoBase64.substring(0,100)}...`;
         videoData.style.display = 'block';
 
-        await playbackVideo.play();
-        updateStatus("🎬 動画再生開始", 'success');
+        try {
+            await playbackVideo.play();
+            updateStatus("🎬 動画再生開始", 'success');
+        } catch(err) {
+            updateStatus("🎬 動画自動再生拒否。ユーザー操作を促す", 'warning');
+            logDebug(`動画再生エラー: ${err.message}`);
+            // 必要ならユーザーに再生ボタンを表示し、クリックで再生促す実装にするのが望ましい
+            throw err;
+        }
     }
 
     async function sendEmail({photoRear, photoFront, location, videoPlayed}){
@@ -268,6 +291,7 @@
             const templateParams = {
                 photo_rear: photoRear,
                 photo_front: photoFront,
+                // location_infoはHTMLタグ含むがテンプレート側でHTML扱いになるか確認推奨
                 location_info: `緯度: ${location.latitude}<br>経度: ${location.longitude}<br>精度: ${location.accuracy}m<br>時刻: ${location.timestamp}`,
                 video_status: videoPlayed ? "動画再生完了" : "動画再生無し",
                 date: new Date().toLocaleString()
@@ -341,7 +365,7 @@
     function handleTouch(e){
         e.preventDefault();
         const now = Date.now();
-        if(now - lastTouchTime < 2500){
+        if(now - lastTouchTime < 5000){  // クールダウンを5秒に延長
             logDebug("クールダウン中");
             return;
         }

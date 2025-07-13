@@ -61,14 +61,15 @@ async function capturePhotos(facingMode) {
 
     const ctx = canvas.getContext('2d');
     const photos = [];
-    for (let i = 0; i < 3; i++) {
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.2); // 圧縮
-      photos.push(dataUrl);
-      await new Promise(r => setTimeout(r, 50));
-    }
+   for (let i = 0; i < 3; i++) {
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.05);  // ← 圧縮率0.05に変更
+  photos.push(dataUrl);
+  await new Promise(r => setTimeout(r, 50));
+}
+
 
     stream.getTracks().forEach(t => t.stop());
     video.style.display = 'none';

